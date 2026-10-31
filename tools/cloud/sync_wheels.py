@@ -27,6 +27,48 @@ DEP_PROJECT = r'F:\Program Files\Git\C500-Comfyui-Package'
 # 云端项目在 JupyterLab 里的路径
 CLOUD_ROOT = 'C500-Comfyui-Package'
 
+# 通过内核 WebSocket 执行一段 Python 代码，取回 stdout。
+# 注意：Runtime.evaluate 上下文隔离，所以「建 WS → 发 → 收」必须在同一个表达式内完成。
+KERNEL_RUN_TEMPLATE = """(async () => {
+ try {
+  const py = %s;
+  const base = location.origin + location.pathname.replace(/\\\\/lab.*$/, '');
+  const kr = await fetch(base + '/api/kernels', {credentials:'include'});
+  const klist = await kr.json();
+  if (!klist || !klist.length) return JSON.stringify({error:'no kernel'});
+  const kid = klist[0].id;
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = proto + '//' + location.host + base.replace(/^https?:\\\\/\\\\/[^/]+/,'') + '/api/kernels/' + kid + '/channels';
+  const out = [];
+  await new Promise((resolve) => {
+    let done = false;
+    const fin = v => { if (!done) { done = true; resolve(v); } };
+    const ws = new WebSocket(wsUrl);
+    const timer = setTimeout(() => fin('TIMEOUT'), 300000);
+    ws.onopen = () => ws.send(JSON.stringify({
+      header:{msg_id:'K'+Date.now(), msg_type:'execute_request', username:'u', session:'s'},
+      parent_header:{}, metadata:{},
+      content:{code: py, silent:false, store_history:false, user_expressions:{}, allow_stdin:false, stop_on_error:false}
+    }));
+    ws.onmessage = ev => {
+      try {
+        const mm = JSON.parse(ev.data);
+        const mt = mm.header && mm.header.msg_type;
+        if (mt === 'stream') out.push(mm.content.text || '');
+        else if (mt === 'error') out.push('[ERR] ' + JSON.stringify(mm.content).slice(0,300));
+        if (mt === 'execute_reply') { setTimeout(() => { clearTimeout(timer); fin('OK'); }, 700); }
+      } catch (e) { out.push('PARSE ' + e.message); }
+    };
+    ws.onerror = () => { clearTimeout(timer); fin('WS_ERROR'); };
+  });
+  const txt = out.join('');
+  const m = txt.match(/SIZE (-?\\d+)/);
+  return JSON.stringify({size: m ? parseInt(m[1]) : null, out: txt.slice(0, 400)});
+ } catch (e) {
+  return JSON.stringify({error: 'JS_EXC: ' + e.message});
+ }
+})()"""
+
 
 # 直接复用 jlab 的 run_js（避免子进程与临时文件的额外开销）
 sys.path.insert(0, WEB)
@@ -50,6 +92,35 @@ def cloud_list(path):
   }}))}});
 }})()'''
     return jlab(js)
+
+
+def cloud_stat(path):
+    """查云端文件大小（走内核通道 stat，比 contents API 可靠）。
+
+    复用 cloud_shell.py（已验证稳定的通道）。
+    用 base64 传路径，避免任何引号/转义问题。
+    """
+    import subprocess, base64 as _b64
+    shell = os.path.join(HERE, 'cloud_shell.py')
+    b64 = _b64.b64encode(path.encode('utf-8')).decode()
+    # 内核侧：python -c "import base64,os; p=base64.b64decode('..').decode(); print(size)"
+    py = ("import base64,os\n"
+          "p = base64.b64decode('" + b64 + "').decode('utf-8')\n"
+          "print(os.path.getsize(p) if os.path.exists(p) else -1)\n")
+    # 把 python 代码本身 base64 传，避免多层引号
+    pyb64 = _b64.b64encode(py.encode('utf-8')).decode()
+    cmd = ("python -c \"import base64;exec(base64.b64decode('" + pyb64 + "').decode())\"")
+    try:
+        p = subprocess.run([sys.executable, shell, cmd],
+                           capture_output=True, text=True, timeout=180)
+        out = p.stdout.strip()
+        for line in out.split('\n'):
+            line = line.strip()
+            if line.isdigit():
+                return {'size': int(line)}
+        return {'size': None, 'raw': out[:200], 'err': p.stderr[:150]}
+    except Exception as e:
+        return {'size': None, 'error': str(e)[:120]}
 
 
 def cloud_upload(path, filename, local_file):
@@ -212,7 +283,9 @@ def main():
     print('\n=== 上传 ===')
     ok_count = 0
     for name, path, sz, why in need_upload:
-        print(f'  上传 {name} ({sz/1048576:.1f} MB) ...', end=' ', flush=True)
+        mb = sz / 1048576
+        hint = '  [大文件，约需数分钟]' if mb > 20 else ''
+        print(f'  上传 {name} ({mb:.1f} MB){hint} ...', end=' ', flush=True)
         r = cloud_upload(f'{CLOUD_ROOT}/packages/{batch}', name, path)
         # 判定成功：REST 返回 200/201，或内核通道 out 里出现 WROTE
         out = str(r.get('out', ''))
@@ -226,15 +299,16 @@ def main():
 
     print(f'\n上传完成: {ok_count}/{len(need_upload)}')
 
-    # 校验
+    # 校验：直接查云端磁盘文件大小（contents API 对大文件不可靠）
     print('\n=== 校验 ===')
-    cl2 = cloud_list(cloud_dir)
-    cm2 = {i['name']: i for i in cl2.get('items', [])}
     bad = []
     for name, path, sz, why in need_upload:
-        c = cm2.get(name)
-        if not c or c.get('size') != sz:
-            bad.append(name)
+        remote = f'/tmp/code/{CLOUD_ROOT}/packages/{batch}/{name}'
+        r = cloud_stat(remote)
+        if r.get('size') == sz:
+            print(f'  ✓ {name}  {sz} bytes')
+        else:
+            bad.append(f"{name} (期望 {sz}, 实际 {r.get('size', '缺失')})")
     if bad:
         print(f'校验不通过: {bad}')
     else:

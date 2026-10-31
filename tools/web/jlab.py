@@ -19,7 +19,7 @@ def send(req):
     """
     payload = json.dumps(req, ensure_ascii=False)
     out = subprocess.run([sys.executable, DAEMON, '--client', '-'],
-                         input=payload, capture_output=True, text=True, timeout=300)
+                         input=payload, capture_output=True, text=True, timeout=900)
     try:
         return json.loads(out.stdout.strip())
     except Exception:
@@ -45,7 +45,7 @@ def run_js(js, match='mlunotebook', threshold=200_000):
         return v
 
     # --- 大 payload：分片传输 ---
-    CHUNK = 100_000
+    CHUNK = 400_000
     r0 = send({'cmd': 'eval', 'expr': '(() => { window.__jsBuf = []; return "init"; })()',
                'match': match})
     if not r0.get('ok'):
