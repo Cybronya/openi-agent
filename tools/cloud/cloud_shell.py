@@ -37,7 +37,7 @@ JS_TEMPLATE = r"""(async () => {
     const kid = list[0].id;
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = proto + '//' + location.host +
-                  base.replace(/^https?:\/\/[^/]+/, '') +
+  const wsUrl = proto + '//' + location.host + base.replace(/^https?:\/\/[^/]+/, '') + '/api/kernels/' + kid + '/channels';
                   '/api/kernels/' + kid + '/channels';
     const py = 'import subprocess, sys\n' +
                'cmd = ' + JSON.stringify(CMD) + '\n' +
@@ -94,8 +94,14 @@ JS_TEMPLATE = r"""(async () => {
 
 
 def send(req, timeout=200):
-    out = subprocess.run([sys.executable, DAEMON, '--client', json.dumps(req, ensure_ascii=False)],
-                         capture_output=True, text=True, timeout=timeout)
+    """发给守护进程。
+
+    必须走 stdin 传 JSON —— JS 表达式里含引号/反斜杠，
+    作为命令行参数会被 Windows 的 cmd 解析层破坏。
+    """
+    payload = json.dumps(req, ensure_ascii=False)
+    out = subprocess.run([sys.executable, DAEMON, '--client', '-'],
+                         input=payload, capture_output=True, text=True, timeout=timeout)
     try:
         return json.loads(out.stdout.strip())
     except Exception:
@@ -111,6 +117,80 @@ def run_shell(cmd, timeout=300):
     if v is None:
         return {'error': 'eval 返回 None（可能被 CSP 或上下文限制）'}
     return {'ok': True, 'output': v}
+
+
+def run_python(py_code, timeout=300):
+    """在云端执行一段 Python 代码（不经 shell，避免引号地狱）。
+
+    原理：代码 base64 化 → 经内核 WebSocket 传到云端 →
+          云端写临时 .py 文件 → 用 python 文件执行 → 回传 stdout。
+
+    相比 run_shell 的优势：cmd 里的引号不会被 /bin/sh 二次解析。
+    """
+    import base64 as _b64, json as _json
+    b64 = _b64.b64encode(py_code.encode('utf-8')).decode()
+    py_lines = [
+        'import base64, os, sys, subprocess',
+        'd = base64.b64decode("' + b64 + '").decode("utf-8")',
+        'p = "/tmp/code/_exec.py"',
+        'open(p, "w", encoding="utf-8").write(d)',
+        'r = subprocess.run([sys.executable, p], capture_output=True, text=True, timeout=' + str(timeout) + ')',
+        'print(r.stdout)',
+        'if r.stderr: print("=== STDERR ==="); print(r.stderr)',
+        'print("=== EXIT " + str(r.returncode) + " ===")',
+    ]
+    py_js = '[' + ', '.join(_json.dumps(x) for x in py_lines) + "].join('\\n');"
+
+    js = """(async () => {
+ try {
+  const py = __PYJS__;
+  const base = location.origin + location.pathname.replace(/\/lab.*$/, '');
+  const kr = await fetch(base + '/api/kernels', {credentials:'include'});
+  const klist = await kr.json();
+  if (!klist || !klist.length) return JSON.stringify({error:'no kernel'});
+  const kid = klist[0].id;
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = proto + '//' + location.host + base.replace(/^https?:\/\/[^/]+/, '') + '/api/kernels/' + kid + '/channels';
+  const out = [];
+  await new Promise((resolve) => {
+    let done = false;
+    const fin = v => { if (!done) { done = true; resolve(v); } };
+    const ws = new WebSocket(wsUrl);
+    const timer = setTimeout(() => fin('TIMEOUT'), __TIMEOUT__);
+    ws.onopen = () => ws.send(JSON.stringify({
+      header:{msg_id:'K'+Date.now(), msg_type:'execute_request', username:'u', session:'s'},
+      parent_header:{}, metadata:{},
+      content:{code: py, silent:false, store_history:false, user_expressions:{}, allow_stdin:false, stop_on_error:false}
+    }));
+    ws.onmessage = ev => {
+      try {
+        const mm = JSON.parse(ev.data);
+        const mt = mm.header && mm.header.msg_type;
+        if (mt === 'stream') out.push(mm.content.text || '');
+        else if (mt === 'error') out.push('[ERR] ' + JSON.stringify(mm.content).slice(0,300));
+        if (mt === 'execute_reply') { setTimeout(() => { clearTimeout(timer); fin('OK'); }, 700); }
+      } catch (e) { out.push('PARSE ' + e.message); }
+    };
+    ws.onerror = () => { clearTimeout(timer); fin('WS_ERROR'); };
+  });
+  return JSON.stringify({out: out.join('')});
+ } catch (e) {
+  return JSON.stringify({error: 'JS_EXC: ' + e.message});
+ }
+})()"""
+    js = js.replace('__PYJS__', py_js).replace('__TIMEOUT__', str((timeout + 120) * 1000))
+
+    req = {'cmd': 'eval', 'expr': js, 'match': MATCH}
+    r = send(req, timeout=timeout + 180)
+    if not r.get('ok'):
+        return {'error': r.get('error')}
+    v = r.get('result')
+    if isinstance(v, str):
+        try:
+            return json.loads(v)
+        except Exception:
+            return {'_raw': v}
+    return v
 
 
 if __name__ == '__main__':

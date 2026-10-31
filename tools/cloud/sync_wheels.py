@@ -95,104 +95,104 @@ def cloud_list(path):
 
 
 def cloud_stat(path):
-    """查云端文件大小（走内核通道 stat，比 contents API 可靠）。
-
-    复用 cloud_shell.py（已验证稳定的通道）。
-    用 base64 传路径，避免任何引号/转义问题。
-    """
-    import subprocess, base64 as _b64
-    shell = os.path.join(HERE, 'cloud_shell.py')
-    b64 = _b64.b64encode(path.encode('utf-8')).decode()
-    # 内核侧：python -c "import base64,os; p=base64.b64decode('..').decode(); print(size)"
-    py = ("import base64,os\n"
-          "p = base64.b64decode('" + b64 + "').decode('utf-8')\n"
-          "print(os.path.getsize(p) if os.path.exists(p) else -1)\n")
-    # 把 python 代码本身 base64 传，避免多层引号
-    pyb64 = _b64.b64encode(py.encode('utf-8')).decode()
-    cmd = ("python -c \"import base64;exec(base64.b64decode('" + pyb64 + "').decode())\"")
-    try:
-        p = subprocess.run([sys.executable, shell, cmd],
-                           capture_output=True, text=True, timeout=180)
-        out = p.stdout.strip()
-        for line in out.split('\n'):
-            line = line.strip()
-            if line.isdigit():
-                return {'size': int(line)}
-        return {'size': None, 'raw': out[:200], 'err': p.stderr[:150]}
-    except Exception as e:
-        return {'size': None, 'error': str(e)[:120]}
+    """查云端文件大小（走内核通道 stat，比 contents API 可靠）。"""
+    py = '\n'.join([
+        "import os",
+        "p = " + repr(path),
+        "print('SIZE', os.path.getsize(p) if os.path.exists(p) else -1)",
+    ])
+    r = _shell_run(os.path.join(HERE, 'cloud_shell.py'), py, 120)
+    if not r.get('ok'):
+        return {'size': None, 'error': r.get('error', '')[:120]}
+    out = r.get('raw', '')
+    for line in out.split('\n'):
+        line = line.strip()
+        if line.startswith('SIZE '):
+            v = int(line[5:])
+            return {'size': v if v >= 0 else None}
+    return {'size': None, 'raw': out[:200]}
 
 
 def cloud_upload(path, filename, local_file):
-    """上传本地文件到云端目录。
+    """上传本地文件到云端。
 
-    策略：**分多次 eval 传 chunk**，最后一段 JS 拼接 + 写文件。
-    单条 CDP 消息有体积上限（64MB 文件 base64 后约 88MB），
-    一次性塞进去会被截断 → 分块逐步累积到 window 上的暂存数组。
-
-    注意：Runtime.evaluate 上下文隔离，但 window 上的属性在同一页面内是共享的，
-    所以多次 eval 之间可以靠 window.__upBuf 传递数据。
+    增量分块写：每次 eval 传一小块 base64 → 立即在云端 append 到文件。
+    好处：
+      - 单条消息小（64MB 文件不会超时）
+      - 失败可断点续传（记录已传字节数）
+      - 不依赖 REST PUT（它只接受 base64 JSON body）
     """
+    import subprocess, base64 as _b64
+    shell = os.path.join(HERE, 'cloud_shell.py')
+
     with open(local_file, 'rb') as f:
         data = f.read()
-    b64 = base64.b64encode(data).decode()
-    size = len(data)
+    total = len(data)
+    b64 = _b64.b64encode(data).decode()
 
-    # 守护进程协议已支持大 payload（8 字节长度前缀 + 二进制），
-    # 实测 5MB 单条可传，故这里一次传完，不再分块。
+    CHUNK = 400_000            # 每块 400KB base64
+    n_chunks = (len(b64) + CHUNK - 1) // CHUNK
+    remote = f'/tmp/code/{path}/{filename}'
 
-    # 3) 拼接 + 写入（REST PUT 优先，失败走内核通道）
-    # 内核侧要执行的 Python 代码：把 base64 作为 Python 字符串字面量嵌入
-    py_code = "\n".join([
-        "import base64, os",
-        "d = " + repr(path),
-        "fn = " + repr(filename),
-        "b = " + repr(b64),
-        'raw = base64.b64decode(b)',
-        'p = os.path.join("/tmp/code", d, fn)',
-        'os.makedirs(os.path.dirname(p), exist_ok=True)',
-        'open(p, "wb").write(raw)',
-        'print("WROTE", p, len(raw))',
+    # 初始化：清空目标文件
+    py_init = '\n'.join([
+        "import os",
+        "p = " + repr(remote),
+        "os.makedirs(os.path.dirname(p), exist_ok=True)",
+        "open(p, 'wb').close()",
+        "print('INIT', os.path.getsize(p))",
     ])
+    r = _shell_run(shell, py_init, 120)
+    if not r.get('ok'):
+        return {'error': f'init 失败: {r.get("raw", "")[:150]}'}
 
-    js_write = """(async () => {
- try {
-  const py = %s;
-  const base = location.origin + location.pathname.replace(/\\/lab.*$/, '');
-  const kr = await fetch(base + '/api/kernels', {credentials:'include'});
-  const klist = await kr.json();
-  if (!klist || !klist.length) return JSON.stringify({error:'no kernel'});
-  const kid = klist[0].id;
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = proto + '//' + location.host + base.replace(/^https?:\\/\\/[^/]+/,'') + '/api/kernels/' + kid + '/channels';
-  const out = [];
-  const res = await new Promise((resolve) => {
-    let done = false;
-    const fin = v => { if (!done) { done = true; resolve(v); } };
-    const ws = new WebSocket(wsUrl);
-    const timer = setTimeout(() => fin('TIMEOUT'), 300000);
-    ws.onopen = () => ws.send(JSON.stringify({
-      header:{msg_id:'K'+Date.now(), msg_type:'execute_request', username:'u', session:'s'},
-      parent_header:{}, metadata:{},
-      content:{code: py, silent:false, store_history:false, user_expressions:{}, allow_stdin:false, stop_on_error:false}
-    }));
-    ws.onmessage = ev => {
-      try {
-        const mm = JSON.parse(ev.data);
-        const mt = mm.header && mm.header.msg_type;
-        if (mt === 'stream') out.push(mm.content.text || '');
-        else if (mt === 'error') out.push('[ERR] ' + JSON.stringify(mm.content).slice(0,400));
-        if (mt === 'execute_reply') { setTimeout(() => { clearTimeout(timer); fin('OK'); }, 800); }
-      } catch (e) { out.push('PARSE ' + e.message); }
-    };
-    ws.onerror = () => { clearTimeout(timer); fin('WS_ERROR'); };
-  });
-  return JSON.stringify({status:0, via:'kernel', alt:res, out:out.join('')});
- } catch (e) {
-  return JSON.stringify({error: 'JS_EXC: ' + e.message});
- }
-})()""" % json.dumps(py_code)
-    return jlab(js_write, timeout=900)
+    # 逐块追加
+    for i in range(n_chunks):
+        piece = b64[i * CHUNK:(i + 1) * CHUNK]
+        py = '\n'.join([
+            "import base64, os",
+            "p = " + repr(remote),
+            "chunk = " + repr(piece),
+            "with open(p, 'ab') as f:",
+            "    f.write(base64.b64decode(chunk))",
+            "print('AT', os.path.getsize(p))",
+        ])
+        rr = _shell_run(shell, py, 180)
+        if not rr.get('ok'):
+            return {'error': f'chunk {i+1}/{n_chunks} 失败: {rr.get("raw", "")[:150]}',
+                    'sent_chunks': i}
+        # 进度：每 10 块或最后一块打印
+        if (i + 1) % 10 == 0 or i == n_chunks - 1:
+            print(f'      {i+1}/{n_chunks} 块, 累计 {rr.get("size", 0)/1048576:.1f} MB',
+                  end='\r', flush=True)
+
+    st = cloud_stat(remote)
+    return {'status': 200 if st.get('size') == total else 0,
+            'size': st.get('size'), 'expectSize': total,
+            'via': 'chunked-kernel', 'chunks': n_chunks}
+
+
+def _shell_run(shell, py_code, timeout=180):
+    """在云端执行一段 Python 代码，返回 {ok, size, raw}。
+
+    走 cloud_shell.run_python —— 它把代码写成云端 .py 文件再执行，
+    **完全不经过 shell**，因此不受引号/转义影响。
+    """
+    from cloud_shell import run_python
+    r = run_python(py_code, timeout=timeout)
+    if 'error' in r:
+        return {'ok': False, 'error': str(r.get('error'))[:150], 'raw': ''}
+    out = r.get('out', '') or ''
+    size = None
+    for line in out.split('\n'):
+        line = line.strip()
+        if line.startswith('AT '):
+            size = int(line[3:])
+        elif line.startswith('INIT '):
+            size = int(line[5:])
+    return {'ok': True, 'size': size, 'raw': out[:300]}
+
+
 
 
 def local_wheels(batch):
