@@ -6,7 +6,7 @@
   python tools/cloud/poll_task.py 920056 1800        # 最多轮询 1800 秒
 
 输出：每次状态变化打印一行；结束时打印最终状态 JSON。
-同时把状态写入 .workbuddy/memory/task_status.json 供其它工具读取。
+同时把状态写入 memory/task_status.json 供其它工具读取。
 """
 import json
 import os
@@ -19,7 +19,7 @@ WEB = os.path.join(os.path.dirname(HERE), 'web')
 DAEMON = os.path.join(WEB, 'cdp_daemon.py')
 MATCH = 'cloudbrains'
 STATE_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(HERE)), '.workbuddy', 'memory', 'task_status.json')
+    os.path.dirname(os.path.dirname(HERE)), 'memory', 'task_status.json')
 
 
 def daemon(req, timeout=120):

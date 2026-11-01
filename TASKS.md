@@ -1,6 +1,6 @@
 # TASKS.md — 项目总控台
 
-> **这是断点续做的唯一入口。** 任何 agent 接手时先读这里，再读 `.workbuddy/memory/MEMORY.md`。
+> **这是断点续做的唯一入口。** 任何 agent 接手时先读这里，再读 `memory/MEMORY.md`。
 
 ## 项目定位
 
@@ -46,7 +46,8 @@ F:\openi\
 │   ├── BROWSER_CDP_GUIDE.md   网页操作完整方法论
 │   ├── cloud_project\         云端项目文档存档
 │   └── screenshots\
-└── .workbuddy\memory\        agent 记忆区
+├── memory\                    ★ agent 记忆区（MEMORY.md + 每日日记）
+└── skills\                    agent 技能沉淀（browser-cdp）
 ```
 
 数据面已整体并入本仓库根下（原 `F:\Program Files\Git\C500-Comfyui-Package` 已搬迁），
@@ -67,6 +68,10 @@ F:\openi\
 | 4 | **本地↔云端同步** | ✅ 完成 | 8 个新 wheel 已 push 远程；建任务 920100 克隆最新代码 |
 | 5 | **脚本缺陷修复** | ✅ 完成 | install_offline.sh 已修并提交（110df4e） |
 | 6 | **部署验证** | ✅ 完成 | 任务 920100 RUNNING → 进容器安装 → 28/28 版本对齐，frontend 升到 1.57.1，torch 栈完好 |
+| + | **ComfyUI 云端启动** | ✅ 完成 | 0.42.0 @ MetaX C500 native（notebook 后台线程方式，日志流式可见），浏览器经 `/proxy/8188/` 访问 |
+
+**数据面已并入本仓库**（2026-11-01 晚）：`C500-Comfyui-Package/` 嵌套独立 git，
+原目录已删除；主仓库已推 https://github.com/Cybronya/openi-agent（c1edd90）。
 
 ---
 
@@ -104,9 +109,26 @@ F:\openi\
 `tools/cloud/sync_wheels.py` 的 base64 传输方案可退休，仅留作应急备份。
 
 **下一步（剩余待办）**：
-1. `bash scripts/install_offline.sh all` —— 装 batch2（视觉/评测栈 31 包，含 2 个 sdist）
+1. ~~`bash scripts/install_offline.sh all` 装 batch2~~ ✅ **已完成（2026-11-01 晚）**：
+   31 包全部安装成功（含 2 个 sdist 经 `--no-build-isolation` 构建），
+   import 验证 **15/15 OK**；torch `2.10.0+metax3.8.1.0` / numpy 1.26.4 /
+   scipy 1.16.0 / pillow 11.2.1 **均未被破坏**
 2. 云端任务 920100 持续 RUNNING 的计费问题待确认
 3. 装 `libportaudio2` 解决 sounddevice 导入失败
+
+### ★ 容器内 git 更新链路（2026-11-01 晚验证）
+
+- **容器访问 `openi.pcl.ac.cn` 的 https 在服务端被 TLS 拒绝**（gnutls/OpenSSL 均报
+  `TLSV1_ALERT_INTERNAL_ERROR`；`mlunotebook.openi.org.cn` 不受影响）
+- **绕过方法：git remote 改用 `http://` 协议**，pull 正常（实测 `Already up to date.`）
+- 云端 `/tmp/code/C500-Comfyui-Package` 当前 commit = `110df4e` = 远程最新
+- **notebook UI 执行链路已打通**（`tools/cloud/js_nb_*.js`）：
+  建 notebook（Launcher 卡片 fallback）→ CodeMirror.setValue 写入 →
+  工具栏 Run 按钮**真实点击**（`[title="Run..."]` 是 **title 而非 aria-label**！
+  坐标 (502,73)，完整 pointer/mouse 事件序列）→ 轮询 `.jp-OutputArea-output`。
+  与内核 WebSocket 通道（`cloud_shell.py`）结果一致，互为备份
+- 守护进程沙箱兼容：`active_endpoint()` 现支持 `OPENI_CHROME_USER_DATA` 环境变量
+  覆盖 + 真实用户目录兜底（沙箱会重定向 LOCALAPPDATA）
 
 > 完整操作手册见 **`docs/CLOUD_DEPLOY_PLAYBOOK.md`**（含表单真实路径、全部 API、16 条坑位速查）。
 
@@ -150,6 +172,9 @@ $ bash scripts/install_offline.sh packages/batch2 plans/to-download-batch2.txt
 > 新发现的待办写在这里，按优先级排列。
 
 ### P1 — 重要
+- [ ] **ComfyUI 工作流缺模型文件**：历史工作流 `video_minimax_h3_t2v`（MiniMax H3 文生视频）
+      提示 5 个问题，safetensors（unet/clip/vae/audio_vae）未上传容器。
+      ComfyUI 本体已跑通，补齐模型即可出片（体积大，走 git 仓库或分块上传待定）。
 - [ ] **云端 PortAudio 缺失**：`sounddevice` 已装但 import 失败（`OSError: PortAudio library not found`）。
       需在云端容器装 `libportaudio2`（apt），非 Python 包问题。
 - [ ] **云端任务计费**：GPU 实例一直 RUNNING，已超 2 小时。需确认是否继续占用。
@@ -173,14 +198,14 @@ $ bash scripts/install_offline.sh packages/batch2 plans/to-download-batch2.txt
 
 **接手时按这个顺序**：
 1. 读本文件 → 知道做到哪了
-2. 读 `.workbuddy/memory/MEMORY.md` → 知道技术决策与踩过的坑
-3. 读 `.workbuddy/memory/2026-11-01.md` → 知道详细过程
+2. 读 `memory/MEMORY.md` → 知道技术决策与踩过的坑
+3. 读 `memory/2026-11-01.md` → 知道详细过程
 4. 按上面「下一步」继续
 
 **每次做完一件事**：
 1. 更新本文件对应阶段的 checkbox
-2. 追加 `.workbuddy/memory/YYYY-MM-DD.md`
-3. 若是技术决策，写进 `.workbuddy/memory/MEMORY.md`
+2. 追加 `memory/YYYY-MM-DD.md`
+3. 若是技术决策，写进 `memory/MEMORY.md`
 
 **注意事项**：
 - `tools/web/cdp_daemon.py` 若未运行，先起它：

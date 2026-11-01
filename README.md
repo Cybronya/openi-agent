@@ -57,7 +57,8 @@ python cli/openi.py sync --upload --install      # 上传并安装
 │   ├── BROWSER_CDP_GUIDE.md   网页操作方法论
 │   ├── cloud_project/         云端项目文档存档
 │   └── screenshots/
-└── .workbuddy/memory/        agent 记忆区
+├── memory/                    ★ agent 记忆区（MEMORY.md + 每日日记）
+└── skills/                    agent 技能沉淀（browser-cdp）
 ```
 
 数据面已整体并入本仓库（2026-11-01），嵌套保留独立 git

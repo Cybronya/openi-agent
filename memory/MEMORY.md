@@ -234,7 +234,12 @@ F:\openi\                        ← 唯一项目根
 
 **数据面以嵌套仓库形式并入**（2026-11-01 定稿）：自带 git/分支/远程原样保留，
 `DEP_PROJECT` 已改为项目根相对路径。主仓库 `.gitignore` 忽略 `/C500-Comfyui-Package/`。
+**原目录已删除**（robocopy 复制 1592 文件逐字节验证后才删）。主仓库已推远程：
+**https://github.com/Cybronya/openi-agent**（远程 HEAD = c1edd90，upstream 已建立）。
 往 C500 远程推更新：`cd F:\openi\C500-Comfyui-Package` 后正常 git push（≤140MB/批经验仍适用）。
+
+**★ 主仓库 commit 身份惯例**：仓库无 author 配置，沿用历史 `Codebuff <codebuff@local>`，
+用 `git -c user.name=... -c user.email=... commit` 单次参数，**不改任何 git config**。
 
 ### ★ 大 payload 传输的 6 个坑（Windows）—— **已退休，留档备查**
 
@@ -268,6 +273,50 @@ const py = [
 
 
 
+### ★★ 守护进程沙箱兼容（2026-11-01 晚修复）
+
+Loomy/WorkBuddy 沙箱会把 `LOCALAPPDATA` 重定向到沙箱路径，Chrome 真实 profile 在
+真实用户目录 → 守护进程按环境变量拼路径永远找不到 `DevToolsActivePort`
+（现象：Chrome 显示 Server running 但守护进程起不来）。
+**`active_endpoint()` 已改为三级探测**：`OPENI_CHROME_USER_DATA` 环境变量 →
+LOCALAPPDATA → `~/AppData/Local` 兜底（cdp_daemon.py 与 cdp_autoconnect.py 同步）。
+沙箱内启动：先设 `$env:OPENI_CHROME_USER_DATA='<真实目录>\Google\Chrome\User Data'` 再起进程。
+首次连接仍弹一次 Chrome 授权窗；`ls-remote` 退出码 0 且无输出 = 远程空仓库。
+
+### ★★ 容器内 git 更新链路（2026-11-01 验证）
+
+- **容器访问 `openi.pcl.ac.cn` 的 https 在服务端被 TLS 拒绝**（git gnutls 与 Python OpenSSL
+  均报 `TLSV1_ALERT_INTERNAL_ERROR`）；`mlunotebook.openi.org.cn` 不受影响
+- **绕过：`git remote set-url origin http://openi.pcl.ac.cn/...`** → pull 正常
+- 云端 `/tmp/code/C500-Comfyui-Package` commit = 远程最新（110df4e）时 pull 显示 `Already up to date.`
+- `pkill -f` 自杀坑：`sh -c` 命令行含整段脚本文本，pkill 模式会匹配执行通道自身
+  → EXIT -15 整条通道被杀。**解法：模式加字符类，如 `pkill -f 'mai[n].py'`**
+
+### ★★ notebook UI 执行链路（2026-11-01 打通，与内核通道互为备份）
+
+工具：`tools/cloud/js_comfy_start.js`（写 cell+启动）、`js_nb_run.js`（精确 Run）、
+`js_nb_read.js`（输出轮询）、`js_toolbar_probe.js`（工具栏枚举）。
+- 建 notebook：`jupyterapp` 全局未暴露 → 点 Launcher 卡片
+  `.jp-LauncherCard[data-category="Notebook"]`；globals 里的 `_JUPYTERLAB` 可探测
+- **Run 按钮标识在 `title` 而非 `aria-label`**（aria 为空）：
+  `.jp-NotebookPanel .jp-Toolbar [title="Run the selected cells and advance"]`（工具栏在 NotebookPanel 层级）
+- 点击必须完整 pointer/mouse 事件序列 + 真实坐标；单次 eval 串全流程会超时 →
+  **拆「setup」「read」两次 eval + 本地轮询**
+- cell 里跑 shell：`subprocess.run(cmd, shell=True, cwd=repo)` + print（避开 `!` 转义）
+
+### ★★ ComfyUI 已在云端跑通（2026-11-01，MetaX C500）
+
+- 启动：notebook cell 后台线程 `subprocess.Popen(['python','main.py','--listen','0.0.0.0','--port','8188'],
+  cwd='/tmp/code/C500-Comfyui-Package/comfyui', ...)` 逐行 print → **日志实时流式进 cell 输出**
+- 前置：`custom_nodes/` 目录缺失会崩（源码快照不带），先 `os.makedirs(exist_ok=True)`
+- 实测：ComfyUI 0.42.0 + **cuda:0 MetaX C500 : native**（VRAM 65120MB）+
+  xformers 0.0.22+metax；新版依赖 frontend 1.57.1 等全加载
+- 浏览器访问：**JupyterLab 代理路由 `/proxy/8188/` 可用**
+  （`https://mlunotebook.openi.org.cn/notebook_<hash>_task0/proxy/8188/`）
+- 非致命：aimdo DynamicVRAM 不可用 → 回退 legacy ModelPatcher
+- **待办**：历史工作流 `video_minimax_h3_t2v`（MiniMax H3 文生视频）提示 5 个问题，
+  大概率缺模型文件（minimax_h3_fl2va_pruned_fp8_scaled 等未上传容器）
+
 ### 仍存在的约束
 
 1. **Chrome 136+ 屏蔽默认 profile 的 `--remote-debugging-port`**
@@ -294,5 +343,6 @@ F:\openi\
 ├── docs\
 │   ├── BROWSER_CDP_GUIDE.md    完整方法论（三个附录）
 │   └── screenshots\            测试证据截图
-└── .workbuddy\memory\          agent 记忆区
+├── memory\                     ★ agent 记忆区（本文件所在）
+└── skills\                     agent 技能沉淀（browser-cdp）
 ```

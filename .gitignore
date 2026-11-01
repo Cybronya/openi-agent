@@ -5,7 +5,7 @@ __pycache__/
 # 临时
 *.log
 _tmp/
-/tmp/
+_tmp_*
 
 # 大文件（截图证据体积大，可按需保留）
 # docs/screenshots/*.png

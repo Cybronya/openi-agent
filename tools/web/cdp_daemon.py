@@ -40,14 +40,25 @@ DEFAULT_PORT = 8765
 
 
 def active_endpoint():
-    base = os.environ.get('LOCALAPPDATA') or os.path.expanduser('~')
-    p = os.path.join(base, 'Google', 'Chrome', 'User Data', 'DevToolsActivePort')
-    if not os.path.exists(p):
-        return None
-    lines = [l.strip() for l in open(p, encoding='utf-8').read().split('\n') if l.strip()]
-    if len(lines) < 2:
-        return None
-    return lines[0], lines[1]
+    # 注意：Loomy/WorkBuddy 沙箱会把 LOCALAPPDATA 重定向到沙箱路径，
+    # 而 Chrome 实际 profile 在真实用户目录。按优先级探测候选位置。
+    dirs = []
+    env_dir = os.environ.get('OPENI_CHROME_USER_DATA')
+    if env_dir:
+        dirs.append(env_dir)
+    la = os.environ.get('LOCALAPPDATA')
+    if la:
+        dirs.append(os.path.join(la, 'Google', 'Chrome', 'User Data'))
+    dirs.append(os.path.join(os.path.expanduser('~'), 'AppData', 'Local',
+                             'Google', 'Chrome', 'User Data'))
+    for d in dirs:
+        p = os.path.join(d, 'DevToolsActivePort')
+        if not os.path.exists(p):
+            continue
+        lines = [l.strip() for l in open(p, encoding='utf-8').read().split('\n') if l.strip()]
+        if len(lines) >= 2:
+            return lines[0], lines[1]
+    return None
 
 
 class CDP:

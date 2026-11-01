@@ -35,15 +35,28 @@ import websockets
 
 
 def active_endpoint():
-    """从 DevToolsActivePort 读取 (port, browser_path)。未开启则返回 None。"""
-    base = os.environ.get('LOCALAPPDATA') or os.path.expanduser('~')
-    p = os.path.join(base, 'Google', 'Chrome', 'User Data', 'DevToolsActivePort')
-    if not os.path.exists(p):
-        return None
-    lines = [l.strip() for l in open(p, encoding='utf-8').read().split('\n') if l.strip()]
-    if len(lines) < 2:
-        return None
-    return lines[0], lines[1]
+    """从 DevToolsActivePort 读取 (port, browser_path)。未开启则返回 None。
+
+    兼容沙箱环境：Loomy/WorkBuddy 会重定向 LOCALAPPDATA，
+    此时按 OPENI_CHROME_USER_DATA 环境变量或真实用户目录兜底。
+    """
+    dirs = []
+    env_dir = os.environ.get('OPENI_CHROME_USER_DATA')
+    if env_dir:
+        dirs.append(env_dir)
+    la = os.environ.get('LOCALAPPDATA')
+    if la:
+        dirs.append(os.path.join(la, 'Google', 'Chrome', 'User Data'))
+    dirs.append(os.path.join(os.path.expanduser('~'), 'AppData', 'Local',
+                             'Google', 'Chrome', 'User Data'))
+    for d in dirs:
+        p = os.path.join(d, 'DevToolsActivePort')
+        if not os.path.exists(p):
+            continue
+        lines = [l.strip() for l in open(p, encoding='utf-8').read().split('\n') if l.strip()]
+        if len(lines) >= 2:
+            return lines[0], lines[1]
+    return None
 
 
 class CDP:
