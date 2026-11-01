@@ -29,8 +29,9 @@ ROOT = os.path.dirname(HERE)
 TOOLS_WEB = os.path.join(ROOT, 'tools', 'web')
 TOOLS_CLOUD = os.path.join(ROOT, 'tools', 'cloud')
 
-# 依赖管理项目（原地保留，只读引用）
-DEP_PROJECT = r'F:\Program Files\Git\C500-Comfyui-Package'
+# 依赖管理项目（数据面，已并入本仓库：F:\openi\C500-Comfyui-Package，
+# 嵌套保留独立 git 与远程 origin=openi.pcl.ac.cn/cybronya/C500-Comfyui-Package）
+DEP_PROJECT = os.path.join(ROOT, 'C500-Comfyui-Package')
 
 GREEN, YELLOW, RED, BLUE, DIM, RESET = (
     '\033[92m', '\033[93m', '\033[91m', '\033[94m', '\033[2m', '\033[0m')

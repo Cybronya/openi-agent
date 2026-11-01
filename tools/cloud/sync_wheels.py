@@ -16,13 +16,15 @@
   python sync_wheels.py --upload           # 上传缺失文件
   python sync_wheels.py --upload --install # 上传后执行安装
   python sync_wheels.py --batch comfyui    # 只处理某个批次
+  python sync_wheels.py --prune            # 删除云端多余的旧 wheel
 """
 import json, os, sys, subprocess, base64, hashlib, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS = os.path.dirname(HERE)          # F:\openi\tools
 WEB = os.path.join(TOOLS, 'web')       # F:\openi\tools\web
-DEP_PROJECT = r'F:\Program Files\Git\C500-Comfyui-Package'
+# 数据面项目（已并入本仓库根下，嵌套保留独立 git）
+DEP_PROJECT = os.path.join(os.path.dirname(TOOLS), 'C500-Comfyui-Package')
 
 # 云端项目在 JupyterLab 里的路径
 CLOUD_ROOT = 'C500-Comfyui-Package'
@@ -226,6 +228,7 @@ def main():
         i = args.index('--batch')
         if i + 1 < len(args):
             batch = args[i + 1]
+    do_prune = '--prune' in args
 
     print('=' * 62)
     print(f' 本地 → 云端 wheel 同步  (批次: {batch})')
@@ -268,6 +271,21 @@ def main():
         print(f'云端多出（本地已删）: {len(extra)} 个')
         for n in extra[:5]:
             print(f'  - {n}')
+
+    # 清理：云端多出的（本地已删的旧 wheel）
+    if do_prune and extra:
+        print(f'\n=== 清理云端多余文件（{len(extra)} 个）===')
+        for n in extra:
+            remote = f'/tmp/code/{CLOUD_ROOT}/packages/{batch}/{n}'
+            py = '\n'.join([
+                "import os",
+                "p = " + repr(remote),
+                "print('RM', os.path.getsize(p) if os.path.exists(p) else -1)",
+                "os.remove(p) if os.path.exists(p) else None",
+                "print('DONE', not os.path.exists(p))",
+            ])
+            r = _shell_run(os.path.join(HERE, 'cloud_shell.py'), py, 120)
+            print(f'  {"已删除" if "DONE True" in r.get("raw", "") else "失败"} {n}')
 
     if not need_upload:
         print('\n云端已是最新。')

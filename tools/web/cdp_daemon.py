@@ -54,6 +54,13 @@ class CDP:
     def __init__(self, ws):
         self.ws = ws
         self._id = 0
+        self.events = []          # 收到的 CDP 事件（Network.* 等）
+        self._hooks = []          # 事件回调
+
+    def on(self, kind, cb):
+        """注册事件回调：cb(params)。kind='event' 收全部事件。"""
+        if kind == "event":
+            self._hooks.append(cb)
 
     async def send(self, method, params=None, sid=None, timeout=30):
         self._id += 1
@@ -68,6 +75,16 @@ class CDP:
                 if "error" in data:
                     raise RuntimeError(f"{method}: {data['error']}")
                 return data.get("result", {})
+            # 非响应消息 → 收集为事件（Network.requestWillBeSent 等）
+            if "method" in data:
+                self.events.append(data)
+                if len(self.events) > 500:
+                    self.events.pop(0)
+                for cb in self._hooks:
+                    try:
+                        cb(data.get("params") or {})
+                    except Exception:
+                        pass
 
 
 class Session:
@@ -198,9 +215,61 @@ class Session:
         await self.cdp.send("Target.closeTarget", {"targetId": hit[0]["targetId"]})
         return hit[0]["url"]
 
+    async def netwatch(self, expr, keyword="openi", timeout=60, pattern=None):
+        """在页面里执行表达式，同时用 CDP Network 域监听请求。
+
+        用于抓「提交表单」时平台发出的 POST 请求与响应体 ——
+        这类请求页面跳转会销毁 window 上的 hook，Runtime 层面抓不到。
+
+        返回 {result, requests: [...]}。
+        """
+        tid, sid = await self.attach(keyword)
+        try:
+            await self.cdp.send("Network.enable", {}, sid)
+        except Exception:
+            pass
+
+        mark = len(self.cdp.events)
+        try:
+            res = await asyncio.wait_for(
+                self.cdp.send("Runtime.evaluate", {
+                    "expression": expr, "returnByValue": True, "awaitPromise": True}, sid),
+                timeout=timeout)
+            value = res.get("result", {}).get("value")
+        except Exception as e:
+            value = {"_error": f"{type(e).__name__}: {e}"}
+
+        try:
+            await self.cdp.send("Network.disable", {}, sid)
+        except Exception:
+            pass
+
+        reqs = []
+        for ev in self.cdp.events[mark:]:
+            m = ev.get("method", "")
+            p = ev.get("params") or {}
+            if m == "Network.requestWillBeSent":
+                r = p.get("request") or {}
+                url = (r.get("url") or "")[:200]
+                if pattern and pattern.lower() not in url.lower():
+                    continue
+                reqs.append({"kind": "req", "method": r.get("method"), "url": url,
+                             "postData": (r.get("postData") or "")[:2500]})
+            elif m == "Network.responseReceived":
+                r = p.get("response") or {}
+                url = (r.get("url") or "")[:200]
+                if pattern and pattern.lower() not in url.lower():
+                    continue
+                reqs.append({"kind": "resp", "status": r.get("status"), "url": url,
+                             "requestId": p.get("requestId")})
+        return {"result": value, "requests": reqs}
+
     async def dispatch(self, req):
         cmd = req.get("cmd", "")
         kw = req.get("match", "openi")
+        if cmd == "netwatch":
+            return {"ok": True, "data": await self.netwatch(
+                req.get("expr", "1"), kw, req.get("timeout", 60), req.get("pattern"))}
         if cmd == "pages":
             ps = await self.pages(req.get("match", ""))
             return {"ok": True, "count": len(ps),

@@ -9,7 +9,7 @@
 | 项目 | 能做 | 不能做 |
 |------|------|--------|
 | `F:\openi`（网页操作） | 接管浏览器、读页面、云端执行 shell | 不知道依赖怎么管、装哪去 |
-| `F:\Program Files\Git\C500-Comfyui-Package`（依赖管理） | 解析依赖、离线下载、多批次安装 | 没法操作网页、没法在云端执行验证 |
+| C500-Comfyui-Package（依赖管理） | 解析依赖、离线下载、多批次安装 | 没法操作网页、没法在云端执行验证 |
 
 真实工作流是交叉的：
 
@@ -20,31 +20,41 @@
 
 整合后由 `cli/openi.py` 一条命令串起来。
 
-## 二、整合方式：保留双项目，共享能力
+## 二、整合方式：物理并入，嵌套保留独立 git（2026-11-01 定稿）
 
-**不搬动依赖项目的文件**。理由：
-1. 它有完整的 git 历史（`1b27e16` 等），搬动会破坏
-2. `.freebuff/` 里有分批推送脚本，与 git 深度耦合
-3. `packages/` 有 982 MB，不适合复制
-
-改为**能力映射 + 统一入口**：
+**演进过程**：最初方案是「双项目分离、原地引用」（见下文历史理由）；
+2026-11-01 最终把数据面整体并入 `F:\openi\C500-Comfyui-Package\`，统一管理：
 
 ```
-F:\openi\                          ← 控制面（网页操作 + CLI + 记忆）
-├── cli/openi.py                   统一入口
-├── tools/web/                     网页操作能力
-├── tools/cloud/                   云端操作能力
-└── docs/
-
-F:\Program Files\Git\C500-Comfyui-Package\   ← 数据面（依赖资产）
-├── packages/{comfyui,batch2}/     wheel 仓库
-├── plans/                         清单与依赖档案
-├── scripts/                       下载/安装脚本
-└── logs/                          操作日志
+F:\openi\                                  ← 唯一项目根（控制面 + 数据面）
+├── cli/openi.py                           统一入口
+├── tools/web/                             网页操作能力
+├── tools/cloud/                           云端操作能力
+├── docs/
+└── C500-Comfyui-Package\                  ← 数据面（嵌套仓库，自带独立 git）
+    ├── packages/{comfyui,batch2}/         wheel 仓库（约 981 MB）
+    ├── comfyui/                           ComfyUI v0.42.0 源码快照
+    ├── plans/                             清单与依赖档案
+    ├── scripts/                           下载/安装/探测脚本
+    ├── logs/                              操作日志
+    ├── AGENTS.md                          硬性规则（torch 禁令等）
+    └── .git/                              独立历史 + origin 指向 OpenI 远程
 ```
 
-`tools/cloud/sync_wheels.py` 里的 `DEP_PROJECT` 常量指向数据面，
-形成「控制面操作数据面」的关系。
+**为什么嵌套保留独立 git**（而非 subtree 合并进主仓库）：
+1. 数据面的 `origin` 指向 `openi.pcl.ac.cn/cybronya/C500-Comfyui-Package`，
+   是云端平台部署链路的一环（平台建任务会 clone 它）——独立仓库可直接 `git push`，
+   链路不变，且历史上「每批 ≤140MB 分批 push」的经验继续适用
+2. 主仓库保持轻量（.git 不膨胀约 1GB），将来主仓库若要推远程更轻松
+3. `backup-full` 分支（旧完整历史）原样保留，可随时回溯
+4. 主仓库 `.gitignore` 已忽略 `/C500-Comfyui-Package/`
+
+历史理由存档（原「不搬动」方案）：git 历史 + `.freebuff/` 与 git 深度耦合 +
+packages 982MB 不宜复制——最终以「整目录 robocopy 复制（含 .git）→ 验证 →
+删原目录」的方式搬动，三个顾虑全部化解（复制保历史、.freebuff 随目录走、同盘复制快）。
+
+`tools/cloud/sync_wheels.py` 与 `cli/openi.py` 的 `DEP_PROJECT` 已改为
+项目根相对路径 `C500-Comfyui-Package`，形成「控制面操作数据面」的关系。
 
 ## 三、能力矩阵
 

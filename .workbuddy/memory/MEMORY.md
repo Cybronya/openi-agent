@@ -1,5 +1,20 @@
 # 项目长期记忆
 
+## ★★★ 主线闭环已跑通（2026-11-01 18:55）—— 接手先读这段
+
+**本地 wheel → git push → 平台建任务 → 平台自动 clone → 云端 install_offline.sh → 验证**，
+全链路一次跑通。
+
+- 8 个新 wheel 已装进云端 C500：`comfyui-frontend-package` **1.53.6 → 1.57.1**，
+  **28/28** 包与 `plans/to-download.txt` 逐一对齐；
+  torch `2.10.0+metax3.8.1.0` / numpy 1.26.4 / scipy 1.16.0 / pillow 11.2.1 **均未被破坏**。
+- **★ 推翻早前设计**：平台会把仓库连同 **616MB wheel 一起完整 clone**，
+  仓库落在 `/tmp/code/<repo-name>/` → **不需要任何自建上传通道**
+  （`sync_wheels.py` 的 base64 方案退休，仅留应急备份）。
+- **★ 完整操作手册**：`docs/CLOUD_DEPLOY_PLAYBOOK.md`
+  （9 节：全链路 / 槽位清理 / 创建表单真实路径 / debug_url / 内核通道 /
+  安装验证 / **16 条坑位速查** / 命令速查 / 执行序列）。做部署类需求先读它。
+
 ## 项目：openi.pcl.ac.cn 网页操作能力
 
 ### ★★★ 首选方案：常驻守护进程（2026-11-01 00:10 落地，零弹窗）
@@ -90,6 +105,29 @@ python tools/cdp_daemon.py --client '{"cmd":"html","mode":"sel","selector":"tabl
 - 算力资源：启智混合智算集群（METAX-GPGPU C500）、天数云（ILUVATAR-GPGPU MR-V100）
 - 云端 JupyterLab：`https://mlunotebook.openi.org.cn/notebook_<hash>_task0/lab`
 
+### ★ 平台 API 速查（均需 `_csrf`）
+
+| 用途 | 接口 |
+|------|------|
+| 任务列表 | `GET /api/v1/ai_task/my_list` |
+| 任务详情 | `GET /api/v1/ai_task?id=X&_csrf=` |
+| 停止任务 | `POST /api/v1/ai_task/stop?id=X&_csrf=` |
+| 建任务前置（配额） | `GET /api/v1/ai_task/creation/required`（`can_create_more` / `not_stop_task_count`） |
+| **删除任务** | `POST /api/v1/ai_task/batch_del?_csrf=` body `{"id":[...],"_csrf":...}` |
+| **容器入口** | `GET /api/v1/ai_task/debug_url?id=X&_csrf=` |
+| 创建任务 | `POST /api/v1/repos/{owner}/{repo}/ai_task/create` |
+| 项目搜索 | `GET /api/v1/repos/search?mode=source&uid=190540` |
+| 仓库分支 | `GET /api/v1/{owner}/{repo}/ai_task/repo_branch` |
+
+- **★ 删除只能走批量**：`/api/v1/ai_task/delete` **不存在（404）**。
+  UI：勾选行 checkbox → 「批量删除」→ 确认弹窗「您确认批量删除选中的任务么？」
+- **★ 调试任务上限 5 个，且「停止」不释放槽位，必须真删除**（否则报「调试任务数量已达上限」）。
+- **★ 容器入口靠列表行的「调试」按钮**（`<a href="javascript:;">`，Vue 绑定），
+  它触发 `debug_url` 并跳转 JupyterLab。**在点它之前 `end_point`/`port` 恒为空**，
+  别指望从任务详情接口拿地址。
+- **★ `code_size_limit: 50` 是容器内项目存储配额 50 GiB，不是代码 50MB 上限**（用户已纠正）。
+
+
 ### ★ 云端项目：C500-Comfyui-Package（2026-11-01 发现）
 
 用户的真实项目，托管在云端 JupyterLab 目录 `/C500-Comfyui-Package/`，
@@ -155,6 +193,19 @@ ws://<host>/notebook_<hash>_task0/api/kernels/<kernel-id>/channels
 
 工具：`tools/cloud_shell.py`（底层 `tools/jlab.py` 从 .js 文件读 JS，避开 shell 引号地狱）
 
+**★ 内核不会自动创建**：lab 首页不起 kernel，`GET /api/kernels` 返回空 → `cloud_shell` 报
+`NO_KERNEL`。手动建：`POST {base}/api/kernels` body `{"name":"python3"}`，
+**必须带 `X-XSRFToken` 头**（取 `_xsrf` cookie），否则 **403**。
+
+**★ 两个验证脚本陷阱**：
+1. `torch.cuda.get_device_name(0)` 会初始化 CUDA context，MetaX 上很慢 → 脚本卡死超时；
+   验证只用 `torch.cuda.is_available()`。
+2. `subprocess(shell=True)` 走 `/bin/sh`(dash)，**heredoc 不可靠** →
+   多行 Python 逻辑改用 `cloud_shell.run_python`（base64 传码）。
+
+**★ 云端 clone 落点是 `/tmp/code/<repo-name>/`**，不是 `/tmp/code/` 本身
+（`code_path` 字段写的是 `/tmp/code`，极易踩坑）。
+
 ### ★ 离线安装的 sdist 陷阱
 `--no-index` 环境下装 sdist（如 fairscale、antlr4-python3-runtime）会失败：
 pip 建隔离环境时要下载 setuptools → 离线拿不到。
@@ -164,25 +215,30 @@ python -m pip install --no-index --find-links packages/batch2 --no-build-isolati
 ```
 另：`subprocess(shell=True)` 走 /bin/sh，**不支持 `<(...)` 进程替换** → 先落地临时清单文件。
 
-### ★ 整合架构（2026-11-01 02:00 落地）
+### ★ 整合架构（2026-11-01 02:00 落地；11-01 晚完成物理合并）
 
 两个项目合成闭环：**操作网页 → 本地下载依赖 → 上传云端 → 云端离线安装 → 验证**
 
 ```
-F:\openi\                        ← 控制面
+F:\openi\                        ← 唯一项目根
 ├── TASKS.md                     ← 断点续做唯一入口
 ├── cli/openi.py                 ← 统一 CLI（doctor/web/cloud/cloud-read/sync/status）
 ├── tools/web/                   ← 网页操作
 ├── tools/cloud/                 ← 云端容器（cloud_shell / sync_wheels）
+├── C500-Comfyui-Package/        ← 数据面（2026-11-01 整体并入，嵌套独立 git）
+│   └── .git origin 指向 openi.pcl.ac.cn/cybronya/C500-Comfyui-Package（部署链路不变）
 └── docs/INTEGRATION.md          ← 整合设计
 
-F:\Program Files\Git\C500-Comfyui-Package\   ← 数据面（原地不动，有 git 历史）
+（原 F:\Program Files\Git\C500-Comfyui-Package 已搬迁，整合验证后删除）
 ```
 
-**依赖项目不搬动**（git 历史 + 982MB packages），通过 `sync_wheels.py` 的
-`DEP_PROJECT` 常量引用，形成「控制面操作数据面」。
+**数据面以嵌套仓库形式并入**（2026-11-01 定稿）：自带 git/分支/远程原样保留，
+`DEP_PROJECT` 已改为项目根相对路径。主仓库 `.gitignore` 忽略 `/C500-Comfyui-Package/`。
+往 C500 远程推更新：`cd F:\openi\C500-Comfyui-Package` 后正常 git push（≤140MB/批经验仍适用）。
 
-### ★ 大 payload 传输的 6 个坑（Windows）
+### ★ 大 payload 传输的 6 个坑（Windows）—— **已退休，留档备查**
+
+> 平台会直接 clone 整仓（含 616MB wheel），通常**不需要**这条通道。
 
 上传 wheel 的 base64 有 64MB，路上踩了 6 个坑：
 

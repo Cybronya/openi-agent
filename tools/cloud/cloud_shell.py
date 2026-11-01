@@ -36,9 +36,7 @@ JS_TEMPLATE = r"""(async () => {
     if (!list || !list.length) return 'NO_KERNEL';
     const kid = list[0].id;
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = proto + '//' + location.host +
-  const wsUrl = proto + '//' + location.host + base.replace(/^https?:\/\/[^/]+/, '') + '/api/kernels/' + kid + '/channels';
-                  '/api/kernels/' + kid + '/channels';
+    const wsUrl = proto + '//' + location.host + base.replace(/^https?:\/\/[^/]+/, '') + '/api/kernels/' + kid + '/channels';
     const py = 'import subprocess, sys\n' +
                'cmd = ' + JSON.stringify(CMD) + '\n' +
                'try:\n' +

@@ -1,0 +1,16 @@
+{
+  "id": 920056,
+  "status": "STOPPED",
+  "detailed": "-",
+  "failed_reason": "",
+  "commit_id": "d35b95fc8731e2f590b823696aba9283b39b18d5",
+  "branch": "master",
+  "repo": "C500-Comfyui-Package",
+  "image": "C500-py3.12-torch2.10-git-unzip-proxy-comfyui",
+  "start_time": 0,
+  "end_time": 0,
+  "duration": "00:00:00",
+  "end_point": "",
+  "port": 0,
+  "code_path": "/tmp/code"
+}

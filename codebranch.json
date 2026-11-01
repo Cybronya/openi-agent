@@ -1,0 +1,90 @@
+[
+  {
+    "kw": "代码分支",
+    "chain": [
+      "SPAN.",
+      "DIV.title",
+      "DIV.left-area",
+      "DIV.form-row",
+      "DIV.form-body-content"
+    ],
+    "html": "<span data-v-0e568022=\"\" class=\"\">代码分支</span>"
+  },
+  {
+    "kw": "项目",
+    "chain": [
+      "DIV.text",
+      "A.nav-item-2 ",
+      "A.",
+      "DIV.nav-item-2-c",
+      "DIV.nav-item-1-c"
+    ],
+    "html": "<div class=\"text\" title=\"项目\">项目</div>"
+  },
+  {
+    "kw": "项目",
+    "chain": [
+      "SPAN.",
+      "DIV.title",
+      "DIV.left-area",
+      "DIV.form-row",
+      "DIV.form-body-content"
+    ],
+    "html": "<span data-v-1f31cc88=\"\" class=\"\"> 项目</span>"
+  },
+  {
+    "kw": "选择项目",
+    "chain": [
+      "DIV.model-item-placeholder",
+      "DIV.model-list-c",
+      "DIV.content",
+      "DIV.left-area",
+      "DIV.form-row"
+    ],
+    "html": "<div data-v-1f31cc88=\"\" class=\"model-item-placeholder\">\n          选择项目\n        </div>"
+  },
+  {
+    "kw": "选择项目",
+    "chain": [
+      "SPAN.",
+      "DIV.btn-select",
+      "DIV.right-area",
+      "DIV.form-row",
+      "DIV.form-body-content"
+    ],
+    "html": "<span data-v-1f31cc88=\"\">选择项目</span>"
+  },
+  {
+    "kw": "选择镜像",
+    "chain": [
+      "SPAN.",
+      "DIV.btn-select",
+      "DIV.right-area",
+      "DIV.form-row",
+      "DIV.form-body-content"
+    ],
+    "html": "<span data-v-dadb6d06=\"\">选择镜像</span>"
+  },
+  {
+    "kw": "资源规格",
+    "chain": [
+      "SPAN.required",
+      "DIV.title",
+      "DIV.left-area",
+      "DIV.form-row",
+      "DIV.form-body-content"
+    ],
+    "html": "<span data-v-2c735a62=\"\" class=\"required\">资源规格</span>"
+  },
+  {
+    "kw": "任务名称",
+    "chain": [
+      "SPAN.required",
+      "DIV.title",
+      "DIV.left-area",
+      "DIV.form-row",
+      "DIV.form-body-content"
+    ],
+    "html": "<span data-v-7ad6b900=\"\" class=\"required\">任务名称</span>"
+  }
+]

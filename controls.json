@@ -1,0 +1,242 @@
+[
+  {
+    "tag": "INPUT",
+    "cls": "",
+    "text": "",
+    "ph": "搜索...",
+    "x": 838,
+    "y": 12,
+    "w": 197,
+    "h": 36
+  },
+  {
+    "tag": "BUTTON",
+    "cls": "",
+    "text": "",
+    "ph": "",
+    "x": 1035,
+    "y": 12,
+    "w": 33,
+    "h": 36
+  },
+  {
+    "tag": "A",
+    "cls": "item active selected",
+    "text": "",
+    "ph": "",
+    "x": 1276,
+    "y": -9994,
+    "w": 39,
+    "h": 36
+  },
+  {
+    "tag": "INPUT",
+    "cls": "el-radio__original",
+    "text": "",
+    "ph": "",
+    "x": 512,
+    "y": 462,
+    "w": 14,
+    "h": 17
+  },
+  {
+    "tag": "INPUT",
+    "cls": "el-radio__original",
+    "text": "",
+    "ph": "",
+    "x": 580,
+    "y": 462,
+    "w": 14,
+    "h": 17
+  },
+  {
+    "tag": "DIV",
+    "cls": "el-select spec-sel field-input el-select--sma",
+    "text": "N 8.00积分/时",
+    "ph": "",
+    "x": 512,
+    "y": 501,
+    "w": 568,
+    "h": 38
+  },
+  {
+    "tag": "INPUT",
+    "cls": "el-input__inner",
+    "text": "",
+    "ph": "请选择资源规格",
+    "x": 512,
+    "y": 501,
+    "w": 568,
+    "h": 38
+  },
+  {
+    "tag": "I",
+    "cls": "el-select__caret el-input__icon el-icon-arrow",
+    "text": "",
+    "ph": "",
+    "x": 1050,
+    "y": 501,
+    "w": 25,
+    "h": 38
+  },
+  {
+    "tag": "INPUT",
+    "cls": "el-input__inner",
+    "text": "",
+    "ph": "任务名称",
+    "x": 512,
+    "y": 576,
+    "w": 568,
+    "h": 38
+  },
+  {
+    "tag": "INPUT",
+    "cls": "el-input__inner",
+    "text": "",
+    "ph": "选择镜像",
+    "x": 512,
+    "y": 812,
+    "w": 568,
+    "h": 38
+  },
+  {
+    "tag": "DIV",
+    "cls": "btn-select",
+    "text": "选择镜像",
+    "ph": "",
+    "x": 1088,
+    "y": 821,
+    "w": 76,
+    "h": 20
+  },
+  {
+    "tag": "DIV",
+    "cls": "model-item-placeholder",
+    "text": "选择数据集",
+    "ph": "",
+    "x": 527,
+    "y": 866,
+    "w": 70,
+    "h": 27
+  },
+  {
+    "tag": "DIV",
+    "cls": "btn-select",
+    "text": "选择数据集",
+    "ph": "",
+    "x": 1088,
+    "y": 872,
+    "w": 90,
+    "h": 20
+  },
+  {
+    "tag": "DIV",
+    "cls": "model-item-placeholder",
+    "text": "选择模型",
+    "ph": "",
+    "x": 527,
+    "y": 917,
+    "w": 56,
+    "h": 27
+  },
+  {
+    "tag": "DIV",
+    "cls": "btn-select",
+    "text": "选择模型",
+    "ph": "",
+    "x": 1088,
+    "y": 922,
+    "w": 76,
+    "h": 20
+  },
+  {
+    "tag": "DIV",
+    "cls": "model-item-placeholder",
+    "text": "选择项目",
+    "ph": "",
+    "x": 527,
+    "y": 967,
+    "w": 56,
+    "h": 27
+  },
+  {
+    "tag": "DIV",
+    "cls": "btn-select",
+    "text": "选择项目",
+    "ph": "",
+    "x": 1088,
+    "y": 963,
+    "w": 76,
+    "h": 38
+  },
+  {
+    "tag": "DIV",
+    "cls": "el-select field-input el-select--small",
+    "text": "",
+    "ph": "",
+    "x": 512,
+    "y": 1043,
+    "w": 568,
+    "h": 38
+  },
+  {
+    "tag": "INPUT",
+    "cls": "el-input__inner",
+    "text": "",
+    "ph": "请选择",
+    "x": 512,
+    "y": 1043,
+    "w": 568,
+    "h": 38
+  },
+  {
+    "tag": "I",
+    "cls": "el-select__caret el-input__icon el-icon-arrow",
+    "text": "",
+    "ph": "",
+    "x": 1050,
+    "y": 1043,
+    "w": 25,
+    "h": 38
+  },
+  {
+    "tag": "INPUT",
+    "cls": "el-checkbox__original",
+    "text": "",
+    "ph": "",
+    "x": 526,
+    "y": 1095,
+    "w": 0,
+    "h": 0
+  },
+  {
+    "tag": "BUTTON",
+    "cls": "el-button submit-btn el-button--primary el-bu",
+    "text": "新建任务",
+    "ph": "",
+    "x": 512,
+    "y": 1139,
+    "w": 98,
+    "h": 40
+  },
+  {
+    "tag": "BUTTON",
+    "cls": "el-button cancel-btn el-button--default el-bu",
+    "text": "取消",
+    "ph": "",
+    "x": 623,
+    "y": 1139,
+    "w": 70,
+    "h": 40
+  },
+  {
+    "tag": "path",
+    "cls": "[object SVGAnimatedString]",
+    "text": "",
+    "ph": "",
+    "x": 417,
+    "y": 1279,
+    "w": 24,
+    "h": 4
+  }
+]

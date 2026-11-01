@@ -45,6 +45,13 @@ python cli/openi.py sync --upload --install      # 上传并安装
 │       ├── cloud_shell.py        内核 WebSocket 执行 shell
 │       ├── sync_wheels.py        本地→云端 wheel 同步
 │       └── cloud_exec.py         笔记本 UI 方式执行（备用）
+├── C500-Comfyui-Package/     ★ 数据面（嵌套独立 git，origin 指向 OpenI 远程）
+│   ├── packages/                 离线 wheel 仓库（comfyui + batch2，约 981 MB）
+│   ├── comfyui/                  ComfyUI v0.42.0 源码快照
+│   ├── plans/                    清单与依赖档案（to-download.txt 为版本权威）
+│   ├── scripts/                  下载/安装/探测脚本
+│   ├── logs/                     操作日志
+│   └── AGENTS.md                 硬性规则（torch 禁令等）
 ├── docs/
 │   ├── INTEGRATION.md         整合设计
 │   ├── BROWSER_CDP_GUIDE.md   网页操作方法论
@@ -53,8 +60,9 @@ python cli/openi.py sync --upload --install      # 上传并安装
 └── .workbuddy/memory/        agent 记忆区
 ```
 
-依赖管理项目在 `F:\Program Files\Git\C500-Comfyui-Package`（原地保留，有 git 历史）。
-本项目通过 `tools/cloud/sync_wheels.py` 的 `DEP_PROJECT` 常量引用它。
+数据面已整体并入本仓库（2026-11-01），嵌套保留独立 git
+（`origin` → `openi.pcl.ac.cn/cybronya/C500-Comfyui-Package`，云端部署链路不变），
+主仓库 `.gitignore` 忽略该子目录。
 
 ## 环境要求
 

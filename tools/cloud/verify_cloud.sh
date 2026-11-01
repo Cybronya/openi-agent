@@ -1,0 +1,11 @@
+cd /tmp/code/C500-Comfyui-Package
+echo "=== 1. frontend ==="
+python -c "import comfyui_frontend_package as f; print(f.__version__)"
+echo "=== 2. torch (no cuda init) ==="
+python -c "import torch; print(torch.__version__)"
+echo "=== 3. numpy / scipy / pillow ==="
+python -c "import numpy, scipy, PIL; print(numpy.__version__, scipy.__version__, PIL.__version__)"
+echo "=== 4. key imports ==="
+python -c "import alembic, av, blake3, kornia, spandrel, torchsde, comfy_kitchen, comfy_aimdo; print('imports OK')"
+echo "=== 5. pip list (relevant) ==="
+pip list --format=freeze 2>/dev/null | grep -iE "^(comfyui|comfy|av|alembic|blake3|kornia|spandrel|torchsde|sqlalchemy|mako|pyopengl|pydantic-settings|python-dotenv|simpleeval|trampoline|numpy|scipy|pillow|torch)"

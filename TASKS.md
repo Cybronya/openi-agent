@@ -11,7 +11,7 @@
 | 来源 | 路径 | 角色 | 能力 |
 |------|------|------|------|
 | 网页操作 | `F:\openi` | **控制面** | CDP 接管浏览器、读取/操作页面、云端容器命令执行、CLI |
-| 依赖管理 | `F:\Program Files\Git\C500-Comfyui-Package` | **数据面** | 依赖解析、离线 wheel 下载、多批次安装、git 分发 |
+| 依赖管理 | `F:\openi\C500-Comfyui-Package`（已并入，嵌套独立 git） | **数据面** | 依赖解析、离线 wheel 下载、多批次安装、git 分发 |
 
 ## 整合后结构
 
@@ -34,6 +34,13 @@ F:\openi\
 │       ├── cloud_shell.py        ★ 内核 WebSocket 执行 shell
 │       ├── sync_wheels.py        ★ 本地→云端 wheel 同步
 │       └── cloud_exec.py         笔记本 UI 方式执行（备用）
+├── C500-Comfyui-Package\     ★ 数据面（2026-11-01 整体并入，嵌套保留独立 git，
+│                               origin 指向 OpenI 远程，云端部署链路不变）
+│   ├── packages\                 离线 wheel（comfyui 28 个 + batch2，约 981MB）
+│   ├── comfyui\                  ComfyUI v0.42.0 源码快照
+│   ├── plans\                    清单（to-download.txt 版本权威 / cloud-env.md 环境权威）
+│   ├── scripts\                  download_wheels.sh / install_offline.sh / probe_*.py
+│   └── logs\                     操作日志
 ├── docs\
 │   ├── INTEGRATION.md         ★ 整合设计文档
 │   ├── BROWSER_CDP_GUIDE.md   网页操作完整方法论
@@ -42,14 +49,14 @@ F:\openi\
 └── .workbuddy\memory\        agent 记忆区
 ```
 
-依赖管理项目**保持原地不动**（有 git 历史，`packages/` 982MB），
-本项目通过 `tools/cloud/sync_wheels.py` 里的 `DEP_PROJECT` 常量引用它。
+数据面已整体并入本仓库根下（原 `F:\Program Files\Git\C500-Comfyui-Package` 已搬迁），
+嵌套保留独立 git 与远程推送通道，主仓库 `.gitignore` 忽略该子目录。
 
 ---
 
 ## 进度总览
 
-**完成度：4 / 6 阶段**（67%）
+**完成度：6 / 6 阶段**（100%）｜主线闭环已端到端跑通并留档
 
 | # | 阶段 | 状态 | 说明 |
 |---|------|------|------|
@@ -57,8 +64,9 @@ F:\openi\
 | 1 | 网页操作能力 | ✅ 完成 | CDP 守护进程打通，8 项能力全通过，零弹窗 |
 | 2 | 云端容器执行 | ✅ 完成 | 内核 WebSocket 通道打通，shell/安装/验证全通 |
 | 3 | **整合架构** | ✅ 完成 | 目录分类、CLI（6 子命令）、TASKS.md 断点机制、INTEGRATION.md |
-| 4 | **本地↔云端同步** | 🔄 进行中 | 差异检测已精确；上传通道已打通（分片方案），待批量跑完+安装 |
+| 4 | **本地↔云端同步** | ✅ 完成 | 8 个新 wheel 已 push 远程；建任务 920100 克隆最新代码 |
 | 5 | **脚本缺陷修复** | ✅ 完成 | install_offline.sh 已修并提交（110df4e） |
+| 6 | **部署验证** | ✅ 完成 | 任务 920100 RUNNING → 进容器安装 → 28/28 版本对齐，frontend 升到 1.57.1，torch 栈完好 |
 
 ---
 
@@ -84,12 +92,23 @@ F:\openi\
 - [x] 差异检测（`sync_wheels.py --dry-run`）：精确识别 8 个缺失 + 8 个云端多余
 - [x] 上传通道打通：base64 → 内核 WebSocket → 容器内写文件
 - [x] 大 payload 分片机制（`jlab.run_js`）：500KB JS 实测通过
-- [ ] 批量上传 8 个 wheel
-- [ ] 云端执行 comfyui 批次安装完成升级
-- [ ] 验证：云端 frontend-package == 1.57.1，且 torch/numpy 未被动
+- [x] 8 个新版 wheel 已随 git commit 110df4e push 到远程仓库（替代原计划的逐包上传）
+- [x] 通过平台「创建计算任务」表单建任务 920100，克隆 master(110df4e) 到容器 /tmp/code
+- [x] 任务 920100 RUNNING → 点「调试」拿 JupyterLab 地址 → 进容器验证 /tmp/code 含 8 个新 wheel
+- [x] 云端执行 `bash scripts/install_offline.sh`（core 28 包）→ 安装成功，RC=0
+- [x] 版本核对 **28/28 全对齐**；frontend 1.53.6→**1.57.1**；torch 2.10.0+metax3.8.1.0 /
+      numpy 1.26.4 / scipy 1.16.0 / pillow 11.2.1 **均未被破坏**
 
-**下一步**：跑 `python tools/cloud/sync_wheels.py --upload --install`，然后用
-`python cli/openi.py cloud "python -m pip list | grep -E 'frontend|torch|numpy'"` 验证。
+**★ 结论（推翻早前设计）**：**平台会把仓库连同 616MB wheel 一起完整 clone**，
+仓库落在 `/tmp/code/<repo-name>/` → **无需任何自建上传通道**，
+`tools/cloud/sync_wheels.py` 的 base64 传输方案可退休，仅留作应急备份。
+
+**下一步（剩余待办）**：
+1. `bash scripts/install_offline.sh all` —— 装 batch2（视觉/评测栈 31 包，含 2 个 sdist）
+2. 云端任务 920100 持续 RUNNING 的计费问题待确认
+3. 装 `libportaudio2` 解决 sounddevice 导入失败
+
+> 完整操作手册见 **`docs/CLOUD_DEPLOY_PLAYBOOK.md`**（含表单真实路径、全部 API、16 条坑位速查）。
 
 ### 上传通道的技术要点（踩了 6 个坑）
 1. **Windows 命令行 32KB 限制** → 大 payload 走 stdin
